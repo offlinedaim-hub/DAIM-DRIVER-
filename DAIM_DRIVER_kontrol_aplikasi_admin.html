@@ -1,0 +1,563 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAIM DRIVER</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#111;color:white;font-family:Arial}
+header{background:#ffc400;color:#111;padding:18px;font-size:23px;font-weight:bold}
+main{max-width:700px;margin:auto;padding:14px}
+button{background:#ffc400;color:#111;border:0;padding:12px;border-radius:8px;font-weight:bold;margin:4px;cursor:pointer}
+input,select,textarea{width:100%;padding:12px;margin:7px 0;background:#292929;color:white;border:1px solid #555;border-radius:8px}
+.card{background:#222;padding:14px;border-radius:12px;margin:12px 0}
+.hidden{display:none!important}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.grid button{height:85px}
+#map,#adminMap,#customerMap{height:300px;border-radius:10px;margin:12px 0}
+.order{padding:12px 0;border-bottom:1px solid #555}
+.status{color:#ffc400;font-weight:bold}
+.small{font-size:12px;color:#bbb}
+.profile-photo{width:92px;height:92px;border-radius:50%;object-fit:cover;background:#444;border:3px solid #ffc400;display:block;margin:8px 0}
+.map-tools{display:flex;gap:6px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>🏍️ DAIM DRIVER</header>
+<main>
+
+<section id="home">
+<h3>Selamat datang di DAIM DRIVER</h3>
+</div>
+<div class="card">
+<h3>Pilih layanan</h3>
+<div class="grid">
+<button onclick="openBooking('DAIM JEK')">🏍️<br>DAIM JEK</button>
+<button onclick="openBooking('DAIM FOODS')">🍔<br>FOODS</button>
+<button onclick="openBooking('DAIM SEED')">📦<br>SEED</button>
+</div>
+</div>
+<div class="card">
+<h3>Pesanan aktif</h3>
+<div id="customerOrders">Belum ada pesanan.</div>
+</div>
+<button onclick="show('history')">RIWAYAT</button>
+<button onclick="show('account')">AKUN</button>
+<button onclick="show('login')">ADMIN</button>
+</section>
+
+<section id="booking" class="hidden">
+<button onclick="show('home')">← Kembali</button>
+<h3 id="serviceTitle"></h3>
+<input id="customerName" placeholder="Nama pelanggan">
+<input id="customerPhone" placeholder="Nomor HP">
+<input id="pickup" placeholder="Alamat jemput otomatis dari peta (bisa diedit)">
+<input id="destination" placeholder="Alamat tujuan otomatis dari peta (bisa diedit)">
+<div id="foodFields" class="hidden">
+<input id="foodName" placeholder="Nama makanan/barang">
+</div>
+<p class="small">Pilih titik di peta: klik pertama untuk alamat jemput, klik kedua untuk alamat tujuan. Alamat akan dicari otomatis sesuai titik peta untuk semua kategori.</p>
+<div class="map-tools"><button onclick="setMapLayer(map,'road')">PETA JALAN</button><button onclick="setMapLayer(map,'satellite')">SATELIT</button></div><div id="map"></div>
+<p>Jarak: <b id="distance">0 km</b></p>
+<p>Tarif: <b id="fare">Rp5.000</b></p>
+<button onclick="createOrder()">PESAN SEKARANG</button>
+</section>
+
+<section id="history" class="hidden">
+<button onclick="show('home')">← Kembali</button>
+<h3>Riwayat pesanan</h3>
+<div id="historyList"></div>
+</section>
+
+<section id="account" class="hidden">
+<button onclick="show('home')">← Kembali</button>
+<h3>Akun DAIM DRIVER</h3>
+<p>Selamat menggunakan DAIM DRIVER.</p>
+</section>
+
+<section id="login" class="hidden">
+<button onclick="show('home')">← Kembali</button>
+<h3>Login Admin</h3>
+<input id="password" type="password" placeholder="Password admin">
+<button onclick="login()">MASUK</button>
+</section>
+
+<section id="admin" class="hidden">
+<h3>ADMIN DAIM DRIVER</h3>
+<button onclick="logout()">KELUAR</button>
+<div class="card">
+<h3>Kontrol aplikasi</h3>
+<p id="appSwitchStatus" class="status">APLIKASI AKTIF — pelanggan dapat memesan.</p>
+<button id="appSwitchButton" onclick="toggleAppAvailability()">MATIKAN APLIKASI</button>
+<p class="small">Jika aplikasi dimatikan, pesanan baru otomatis berstatus “Gagal mendapatkan driver”. Pesanan yang sudah masuk sebelumnya tidak berubah.</p>
+</div>
+<div class="card">
+<h3>Profil Admin</h3>
+<img id="adminPhotoPreview" class="profile-photo" alt="Foto profil admin" src="" style="display:none">
+<label>Foto profil admin</label>
+<input id="adminPhoto" type="file" accept="image/*" onchange="previewAdminPhoto(event)">
+<input id="adminName" placeholder="Nama admin">
+<input id="adminPhone" placeholder="Nomor HP admin">
+<input id="adminEmail" type="email" placeholder="Email admin">
+<textarea id="adminAddress" placeholder="Alamat admin" rows="2"></textarea>
+<button onclick="saveAdminProfile()">SIMPAN PROFIL ADMIN</button>
+<p id="adminProfileStatus" class="small">Profil akan tampil di Lihat Pesanan setelah pesanan diterima.</p>
+</div>
+<div class="card">
+<h3>Profil pengemudi</h3>
+<input id="driverName" placeholder="Nama pengemudi">
+<input id="driverPlate" placeholder="Plat nomor motor">
+<button onclick="saveDriver()">SIMPAN PROFIL</button>
+<button onclick="startGPS()">AKTIFKAN GPS</button>
+<button onclick="stopGPS()">MATIKAN GPS</button>
+<p id="gpsStatus" class="small">GPS belum aktif.</p>
+</div>
+<div class="card">
+<h3>Peta pengemudi</h3>
+<div class="map-tools"><button onclick="setMapLayer(adminMap,'road')">PETA JALAN</button><button onclick="setMapLayer(adminMap,'satellite')">SATELIT</button></div><div id="adminMap"></div>
+</div>
+<div class="card">
+<h3>Pesanan aktif</h3>
+<div id="adminOrders"></div>
+</div>
+<div class="card">
+<h3>Chat pelanggan</h3>
+<select id="chatSelect" onchange="renderAdminChat()">
+<option value="">Pilih pesanan</option>
+</select>
+<div id="adminChatMessages"></div>
+<input id="adminChatInput" placeholder="Tulis pesan">
+<button onclick="sendAdminChat()">KIRIM</button>
+</div>
+</section>
+
+<section id="customerTrack" class="hidden">
+<button onclick="show('home')">← Kembali</button>
+<h3>Pelacakan pengemudi</h3>
+<div class="map-tools"><button onclick="setMapLayer(customerMap,'road')">PETA JALAN</button><button onclick="setMapLayer(customerMap,'satellite')">SATELIT</button></div><div id="customerMap" style="height:300px"></div>
+<div id="trackInfo" class="card"></div>
+<div id="acceptedAdminProfile" class="card hidden"></div>
+<button onclick="showCustomerChat()">CHAT PENGEMUDI</button>
+</section>
+
+<section id="customerChat" class="hidden">
+<button onclick="show('customerTrack')">← Kembali</button>
+<h3>Chat pengemudi</h3>
+<div id="customerMessages"></div>
+<input id="customerChatInput" placeholder="Tulis pesan">
+<button onclick="sendCustomerChat()">KIRIM</button>
+</section>
+
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let orders=JSON.parse(localStorage.getItem("daimOrders")||"[]");
+let chats=JSON.parse(localStorage.getItem("daimChats")||"{}");
+let driver=JSON.parse(localStorage.getItem("daimDriver")||'{"name":"","plate":"","lat":null,"lng":null}');
+let adminProfile=JSON.parse(localStorage.getItem("daimAdminProfile")||'{"name":"","phone":"","email":"","address":"","photo":""}');
+let mapLayers={};
+let service="",pickupPoint=null,destinationPoint=null;
+let map=null,adminMap=null,customerMap=null;
+let pickMarker=null,destMarker=null;
+let adminMotor=null,customerMotor=null;
+let gpsWatch=null,activeChat=null,activeCustomerOrder=null;
+let lastGeocodeAt=0,geocodeQueue=Promise.resolve();
+let appEnabled=localStorage.getItem("daimAppEnabled")!=="false";
+
+function save(){
+ localStorage.setItem("daimOrders",JSON.stringify(orders));
+ localStorage.setItem("daimChats",JSON.stringify(chats));
+ localStorage.setItem("daimDriver",JSON.stringify(driver));
+}
+
+function previewAdminPhoto(event){
+ let file=event.target.files&&event.target.files[0];if(!file)return;
+ if(!file.type.startsWith("image/")){alert("Pilih file gambar.");return}
+ if(file.size>2*1024*1024){alert("Ukuran foto maksimal 2 MB.");event.target.value="";return}
+ let reader=new FileReader();
+ reader.onload=()=>{$("adminPhotoPreview").src=reader.result;$("adminPhotoPreview").style.display="block";adminProfile.photo=reader.result;};
+ reader.readAsDataURL(file);
+}
+function saveAdminProfile(){
+ adminProfile.name=$("adminName").value.trim();
+ adminProfile.phone=$("adminPhone").value.trim();
+ adminProfile.email=$("adminEmail").value.trim();
+ adminProfile.address=$("adminAddress").value.trim();
+ localStorage.setItem("daimAdminProfile",JSON.stringify(adminProfile));
+ $("adminProfileStatus").textContent="Profil admin berhasil disimpan.";
+ if(activeCustomerOrder!==null && !$("customerTrack").classList.contains("hidden"))renderTrack();
+ alert("Profil admin berhasil disimpan.");
+}
+function loadAdminProfile(){
+ $("adminName").value=adminProfile.name||"";
+ $("adminPhone").value=adminProfile.phone||"";
+ $("adminEmail").value=adminProfile.email||"";
+ $("adminAddress").value=adminProfile.address||"";
+ if(adminProfile.photo){$("adminPhotoPreview").src=adminProfile.photo;$("adminPhotoPreview").style.display="block";}
+ else{$("adminPhotoPreview").style.display="none";}
+}
+
+function setMapLayer(target,mode){
+ if(!target){alert("Peta belum siap. Buka halaman peta dahulu.");return}
+ let key=target===map?"booking":target===adminMap?"admin":"customer";
+ if(mapLayers[key])target.removeLayer(mapLayers[key]);
+ let url=mode==="satellite"
+  ?"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+  :"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+ let attribution=mode==="satellite"?"Tiles © Esri — Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community":"© OpenStreetMap contributors";
+ mapLayers[key]=L.tileLayer(url,{attribution:attribution,maxZoom:19});
+ mapLayers[key].addTo(target);
+}
+function addDefaultLayer(target,key){
+ mapLayers[key]=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap contributors",maxZoom:19}).addTo(target);
+}
+
+function rupiah(n){return "Rp"+Math.round(n).toLocaleString("id-ID")}
+function show(id){
+ document.querySelectorAll("main section").forEach(s=>s.classList.add("hidden"));
+ $(id).classList.remove("hidden");
+ if(id==="home")renderCustomer();
+ if(id==="history")renderHistory();
+ if(id==="admin"){
+  renderAdmin();
+  setTimeout(()=>{if(adminMap)adminMap.invalidateSize()},200);
+ }
+ if(id==="customerTrack"){
+  renderTrack();
+  setTimeout(()=>{if(customerMap)customerMap.invalidateSize()},200);
+ }
+}
+function openBooking(s){
+ service=s;
+ $("serviceTitle").textContent=s;
+ $("foodFields").classList.toggle("hidden",s!=="DAIM FOODS");
+ pickupPoint=null;destinationPoint=null;
+ show("booking");
+ setTimeout(initMap,250);
+}
+function initMap(){
+ if(!map){
+  map=L.map("map").setView([-0.5022,117.1536],13);
+  addDefaultLayer(map,"booking");
+  map.on("click",e=>{
+   if(!pickupPoint){
+    pickupPoint=e.latlng;
+    $("pickup").value="Mencari alamat jemput...";
+    if(pickMarker)map.removeLayer(pickMarker);
+    pickMarker=L.marker(e.latlng).addTo(map).bindPopup("Mencari alamat jemput...").openPopup();
+    reversePointAddress(e.latlng,"pickup",pickMarker);
+   }else if(!destinationPoint){
+    destinationPoint=e.latlng;
+    $("destination").value="Mencari alamat tujuan...";
+    if(destMarker)map.removeLayer(destMarker);
+    destMarker=L.marker(e.latlng).addTo(map).bindPopup("Mencari alamat tujuan...").openPopup();
+    reversePointAddress(e.latlng,"destination",destMarker);
+   }else{
+    pickupPoint=e.latlng;destinationPoint=null;
+    $("pickup").value="Mencari alamat jemput...";
+    $("destination").value="";
+    if(pickMarker)map.removeLayer(pickMarker);
+    if(destMarker)map.removeLayer(destMarker);
+    pickMarker=L.marker(e.latlng).addTo(map).bindPopup("Mencari alamat jemput...").openPopup();
+    destMarker=null;
+    reversePointAddress(e.latlng,"pickup",pickMarker);
+   }
+   calculateFare();
+  });
+ }
+ setTimeout(()=>map.invalidateSize(),100);
+}
+function reversePointAddress(point,field,marker){
+ const lat=point.lat,lon=point.lng;
+ const fallback=`Titik peta (${lat.toFixed(6)}, ${lon.toFixed(6)})`;
+ const label=field==="pickup"?"Alamat jemput":"Alamat tujuan";
+ geocodeQueue=geocodeQueue.then(async()=>{
+  const wait=Math.max(0,1100-(Date.now()-lastGeocodeAt));
+  if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
+  lastGeocodeAt=Date.now();
+  try{
+   const url=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1&accept-language=id`;
+   const response=await fetch(url,{headers:{"Accept":"application/json"}});
+   if(!response.ok)throw new Error("Layanan alamat tidak tersedia");
+   const data=await response.json();
+   const address=(data&&data.display_name)?data.display_name:fallback;
+   // Abaikan hasil lama jika pelanggan sudah memilih titik baru.
+   const current=field==="pickup"?pickupPoint:destinationPoint;
+   if(!current||Math.abs(current.lat-lat)>0.0000001||Math.abs(current.lng-lon)>0.0000001)return;
+   $(field).value=address;
+   if(marker&&map&&map.hasLayer(marker))marker.setPopupContent(`<b>${label}</b><br>${escapeHTML(address)}`).openPopup();
+  }catch(err){
+   const current=field==="pickup"?pickupPoint:destinationPoint;
+   if(!current||Math.abs(current.lat-lat)>0.0000001||Math.abs(current.lng-lon)>0.0000001)return;
+   $(field).value=fallback;
+   if(marker&&map&&map.hasLayer(marker))marker.setPopupContent(`<b>${label}</b><br>${fallback}<br><small>Alamat otomatis gagal dimuat</small>`).openPopup();
+  }
+ });
+}
+
+function calculateFare(){
+ if(!pickupPoint||!destinationPoint)return;
+ let km=pickupPoint.distanceTo(destinationPoint)/1000;
+ $("distance").textContent=km.toFixed(1)+" km";
+ $("fare").textContent=rupiah(5000+km*3000);
+}
+function createOrder(){
+ let name=$("customerName").value.trim();
+ let phone=$("customerPhone").value.trim();
+ let pickup=$("pickup").value.trim();
+ let destination=$("destination").value.trim();
+ if(!name||!phone||!pickup||!destination){
+  alert("Lengkapi nama, nomor HP, dan alamat.");return;
+ }
+ if(!pickupPoint||!destinationPoint){
+  alert("Tentukan titik jemput dan tujuan di peta.");return;
+ }
+ let km=pickupPoint.distanceTo(destinationPoint)/1000;
+ let order={
+  id:Date.now(),
+  name,phone,pickup,destination,
+  service,
+  food:$("foodName").value,
+  km:km.toFixed(1),
+  fare:Math.round(5000+km*3000),
+  pLat:pickupPoint.lat,pLng:pickupPoint.lng,
+  dLat:destinationPoint.lat,dLng:destinationPoint.lng,
+  status:appEnabled?"Menunggu admin":"Gagal mendapatkan driver",
+  failureReason:appEnabled?"":"Aplikasi sedang dimatikan oleh admin.",
+  created:new Date().toLocaleString("id-ID")
+ };
+ orders.unshift(order);save();
+ if(appEnabled){
+  alert("Pesanan berhasil dikirim!");
+ }else{
+  alert("Maaf, gagal mendapatkan driver karena aplikasi sedang dimatikan. Silakan coba lagi nanti.");
+ }
+ show("home");
+}
+function renderCustomer(){
+ let active=orders.filter(o=>o.status!=="Selesai"&&o.status!=="Gagal mendapatkan driver");
+ $("customerOrders").innerHTML=active.length?active.map(o=>`
+ <div class="order">
+ <b>${o.service}</b><br>
+ ${o.pickup} → ${o.destination}<br>
+ ${rupiah(o.fare)}<br>
+ <span class="status">${o.status}</span><br>
+ <button onclick="trackOrder(${o.id})">LIHAT PESANAN</button>
+ </div>`).join(""):"Belum ada pesanan.";
+}
+function renderHistory(){
+ let done=orders.filter(o=>o.status==="Selesai");
+ $("historyList").innerHTML=done.length?done.map(o=>`
+ <div class="order">${o.service}<br>${o.pickup} → ${o.destination}<br>${rupiah(o.fare)}<br>Selesai</div>
+ `).join(""):"Belum ada riwayat.";
+}
+function login(){
+ if($("password").value==="123456789"){
+  show("admin");
+ }else alert("Password salah!");
+}
+function logout(){stopGPS();show("home")}
+function saveDriver(){
+ driver.name=$("driverName").value.trim();
+ driver.plate=$("driverPlate").value.trim();
+ save();alert("Profil pengemudi disimpan.");
+}
+function initAdminMap(){
+ if(!adminMap){
+  adminMap=L.map("adminMap").setView([-0.5022,117.1536],13);
+  addDefaultLayer(adminMap,"admin");
+ }
+ if(driver.lat!==null)updateMotor();
+}
+function motorIcon(){
+ return L.divIcon({className:"",html:'<div style="font-size:30px">🏍️</div>',iconSize:[35,35],iconAnchor:[17,17]});
+}
+function updateMotor(follow=true){
+ if(driver.lat===null||driver.lng===null)return;
+ let p=[driver.lat,driver.lng];
+ if(adminMap){
+  if(!adminMotor)adminMotor=L.marker(p,{icon:motorIcon(),zIndexOffset:1000}).addTo(adminMap).bindPopup("Lokasi motor DAIM DRIVER");
+  else adminMotor.setLatLng(p);
+  if(follow)adminMap.setView(p,17,{animate:true});
+ }
+ if(customerMap){
+  if(!customerMotor)customerMotor=L.marker(p,{icon:motorIcon(),zIndexOffset:1000}).addTo(customerMap).bindPopup("Lokasi motor DAIM DRIVER");
+  else customerMotor.setLatLng(p);
+  if(follow)customerMap.setView(p,17,{animate:true});
+ }
+}
+function startGPS(){
+ if(!navigator.geolocation){alert("GPS tidak didukung browser.");return}
+ if(!navigator.geolocation.watchPosition){alert("GPS tidak tersedia.");return}
+ stopGPS();
+ gpsWatch=navigator.geolocation.watchPosition(pos=>{
+  driver.lat=pos.coords.latitude;
+  driver.lng=pos.coords.longitude;
+  save();updateMotor();
+  $("gpsStatus").textContent="🟢 LOKASI AKTIF — motor mengikuti posisi GPS.";
+ },err=>{
+  $("gpsStatus").textContent="GPS gagal: "+err.message;
+ },{enableHighAccuracy:true,maximumAge:3000,timeout:15000});
+ $("gpsStatus").textContent="Meminta izin lokasi...";
+}
+function stopGPS(){
+ if(gpsWatch!==null){
+  navigator.geolocation.clearWatch(gpsWatch);
+  gpsWatch=null;
+ }
+}
+function toggleAppAvailability(){
+ appEnabled=!appEnabled;
+ localStorage.setItem("daimAppEnabled",String(appEnabled));
+ updateAppSwitchUI();
+ alert(appEnabled?"Aplikasi diaktifkan. Pelanggan bisa memesan.":"Aplikasi dimatikan. Pesanan baru akan otomatis gagal mendapatkan driver.");
+}
+function updateAppSwitchUI(){
+ const status=$("appSwitchStatus"),button=$("appSwitchButton");
+ if(!status||!button)return;
+ status.textContent=appEnabled?"APLIKASI AKTIF — pelanggan dapat memesan.":"APLIKASI DIMATIKAN — pesanan baru otomatis gagal mendapatkan driver.";
+ status.style.color=appEnabled?"#20c997":"#ff6b6b";
+ button.textContent=appEnabled?"MATIKAN APLIKASI":"AKTIFKAN APLIKASI";
+}
+function renderAdmin(){
+ updateAppSwitchUI();
+ loadAdminProfile();
+ $("driverName").value=driver.name||"";
+ $("driverPlate").value=driver.plate||"";
+ initAdminMap();
+ let active=orders.filter(o=>o.status!=="Selesai");
+ $("adminOrders").innerHTML=active.length?active.map(o=>`
+ <div class="order">
+ <b>${o.service}</b><br>
+ Pelanggan: ${o.name}<br>
+ HP: ${o.phone}<br>
+ Jemput: ${o.pickup}<br>
+ Tujuan: ${o.destination}<br>
+ ${o.food?"Pesanan: "+o.food+"<br>":""}
+ Jarak: ${o.km} km<br>
+ Tarif: ${rupiah(o.fare)}<br>
+ <span class="status">${o.status}</span><br>
+ <button onclick="confirmOrder(${o.id})">TERIMA</button>
+ <button onclick="changeStatus(${o.id},'Menuju jemput')">MENUJU JEMPUT</button>
+ <button onclick="changeStatus(${o.id},'Dalam perjalanan')">DALAM PERJALANAN</button>
+ <button onclick="changeStatus(${o.id},'Selesai')">SELESAI</button>
+ <button onclick="chooseChat(${o.id})">CHAT</button>
+ <button onclick="showOrderOnMap(${o.id})">PETA</button>
+ </div>`).join(""):"Tidak ada pesanan aktif.";
+ $("chatSelect").innerHTML='<option value="">Pilih pesanan</option>'+active.map(o=>`<option value="${o.id}">${o.name} - ${o.service}</option>`).join("");
+}
+function confirmOrder(id){
+ let o=orders.find(x=>x.id===id);if(!o)return;
+ o.status="Diterima admin";
+ o.confirmedAt=Date.now();
+ save();renderAdmin();renderCustomer();
+ if(activeCustomerOrder===id && !$("customerTrack").classList.contains("hidden"))renderTrack();
+ setTimeout(()=>{
+  if(adminMap){
+   adminMap.invalidateSize();
+   adminMap.setView([o.pLat,o.pLng],17,{animate:true});
+   if(adminMap.pickupMarker)adminMap.removeLayer(adminMap.pickupMarker);
+   if(adminMap.destinationMarker)adminMap.removeLayer(adminMap.destinationMarker);
+   adminMap.pickupMarker=L.marker([o.pLat,o.pLng]).addTo(adminMap).bindPopup("Lokasi jemput");
+   adminMap.destinationMarker=L.marker([o.dLat,o.dLng]).addTo(adminMap).bindPopup("Lokasi tujuan");
+   if(driver.lat!==null&&driver.lng!==null)updateMotor(true);
+  }
+ },250);
+}
+function changeStatus(id,status){
+ let o=orders.find(x=>x.id===id);if(!o)return;
+ o.status=status;
+ if(status==="Selesai")o.finishedAt=new Date().toISOString();
+ save();renderAdmin();renderCustomer();renderHistory();
+ if(status==="Selesai")alert("Pesanan selesai dan dipindahkan ke riwayat.");
+}
+function trackOrder(id){
+ activeCustomerOrder=id;
+ show("customerTrack");
+}
+function renderTrack(){
+ let o=orders.find(x=>x.id===activeCustomerOrder);
+ if(!o)return;
+ $("trackInfo").innerHTML=`
+ <b>${o.service}</b><br>
+ Status: <span class="status">${o.status}</span><br>
+ Pengemudi: ${driver.name||"Menunggu pengemudi"}<br>
+ Plat: ${driver.plate||"-"}<br>
+ Jemput: ${o.pickup}<br>
+ Tujuan: ${o.destination}`;
+ let acceptedProfile=$("acceptedAdminProfile");
+ if(o.status!=="Menunggu admin" && o.status!=="Menunggu"){
+  let photo=adminProfile.photo?`<img class="profile-photo" src="${adminProfile.photo}" alt="Foto profil admin">`:`<div class="small">Foto profil admin belum ditambahkan.</div>`;
+  acceptedProfile.classList.remove("hidden");
+  acceptedProfile.innerHTML=`<h3>Profil Admin</h3>${photo}<b>${escapeHTML(adminProfile.name||"Admin DAIM DRIVER")}</b><br>${adminProfile.phone?`Nomor HP: ${escapeHTML(adminProfile.phone)}<br>`:""}${adminProfile.email?`Email: ${escapeHTML(adminProfile.email)}<br>`:""}${adminProfile.address?`Alamat: ${escapeHTML(adminProfile.address)}`:""}`;
+ }else{
+  acceptedProfile.classList.add("hidden");
+  acceptedProfile.innerHTML="";
+ }
+ if(!customerMap){
+  customerMap=L.map("customerMap").setView([o.pLat,o.pLng],17);
+  addDefaultLayer(customerMap,"customer");
+ }
+ customerMap.setView([o.pLat,o.pLng],17);
+ if(!customerMap.pickup)customerMap.pickup=L.marker([o.pLat,o.pLng]).addTo(customerMap).bindPopup("Jemput");
+ if(!customerMap.destination)customerMap.destination=L.marker([o.dLat,o.dLng]).addTo(customerMap).bindPopup("Tujuan");
+ updateMotor();
+ renderCustomerMessages();
+}
+function showOrderOnMap(id){
+ let o=orders.find(x=>x.id===id);if(!o)return;
+ show("admin");
+ setTimeout(()=>{
+  if(adminMap){
+   adminMap.setView([o.pLat,o.pLng],14);
+   if(adminMap.orderLine)adminMap.removeLayer(adminMap.orderLine);
+   adminMap.orderLine=L.polyline([[o.pLat,o.pLng],[o.dLat,o.dLng]],{color:"#ffc400"}).addTo(adminMap);
+   L.marker([o.pLat,o.pLng]).addTo(adminMap).bindPopup("Jemput");
+   L.marker([o.dLat,o.dLng]).addTo(adminMap).bindPopup("Tujuan");
+  }
+ },300);
+}
+function chooseChat(id){
+ activeChat=id;
+ $("chatSelect").value=String(id);
+ renderAdminChat();
+}
+function renderAdminChat(){
+ let id=Number($("chatSelect").value);
+ if(id)activeChat=id;
+ let list=chats[activeChat]||[];
+ $("adminChatMessages").innerHTML=list.map(m=>`<p><b>${m.from}:</b> ${escapeHTML(m.text)}</p>`).join("");
+}
+function sendAdminChat(){
+ if(!activeChat){alert("Pilih pesanan dahulu.");return}
+ let t=$("adminChatInput").value.trim();if(!t)return;
+ chats[activeChat]=chats[activeChat]||[];
+ chats[activeChat].push({from:"Pengemudi",text:t});
+ $("adminChatInput").value="";save();renderAdminChat();
+}
+function showCustomerChat(){
+ show("customerChat");renderCustomerMessages();
+}
+function renderCustomerMessages(){
+ let list=chats[activeCustomerOrder]||[];
+ $("customerMessages").innerHTML=list.map(m=>`<p><b>${m.from}:</b> ${escapeHTML(m.text)}</p>`).join("");
+}
+function sendCustomerChat(){
+ let t=$("customerChatInput").value.trim();if(!t)return;
+ if(!activeCustomerOrder)return;
+ chats[activeCustomerOrder]=chats[activeCustomerOrder]||[];
+ chats[activeCustomerOrder].push({from:"Pelanggan",text:t});
+ $("customerChatInput").value="";save();renderCustomerMessages();
+}
+function escapeHTML(t){
+ return String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+show("home");
+</script>
+</body>
+</html>
